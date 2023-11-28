@@ -1,0 +1,37 @@
+name: Deploy to Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: windows-latest  # Change this line to use a Windows runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          # Add any additional setup commands
+
+      - name: Run tests
+        run: |
+          # Add commands to run tests
+
+      - name: Deploy API
+        run: |
+          mlflow models serve -m mlflow_model --host 0.0.0.0 --port 8001
+        background: true
+
+      - name: Deploy Dashboard
+        run: |
+          # Add commands to deploy the dashboard
