@@ -34,4 +34,4 @@ jobs:
 
       - name: Deploy Dashboard
         run: |
-          # Add commands to deploy the dashboard
+          streamlit run dashbord.py
