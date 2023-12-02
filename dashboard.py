@@ -11,7 +11,8 @@ import shap
 from PIL import Image
 import plotly.graph_objects as go
 import plotly.express as px
-
+import requests
+from matplotlib.patches import Rectangle, FancyArrowPatch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
 import scikitplot as skplt
@@ -38,9 +39,37 @@ def configure_page():
         </style> """,
         unsafe_allow_html=True)
 
+def request_prediction(model_uri, data):
+    headers = {"Content-Type": "application/json"}
+
+    # Convertir le DataFrame ou le tableau NumPy en un format attendu par le modèle MLflow
+    if isinstance(data, pd.DataFrame):
+        input_data = {"instances": data.to_dict(orient='records')}
+    elif isinstance(data, np.ndarray):
+        input_data = {"instances": data.tolist()}
+    else:
+        raise ValueError("Unsupported data type. Use DataFrame or numpy array.")
+
+    response = requests.request(
+        method='POST', headers=headers, url=model_uri, json=input_data)
+
+    if response.status_code != 200:
+        raise Exception(
+            f"Request failed with status {response.status_code}, {response.text}")
+
+    return response.json()
+
+
+import mlflow.sklearn
 
 def load_model_and_data():
+    # Use the model URI from MLflow
+    #model_uri = "runs:/b441ac36ae5d4af3b29bb2134a1606a1/mlflow_model"
+
+    # Load the LightGBM model from MLflow
     lgbm_clf = pickle.load(open("C:/Users/jerom/projet_7/dashboard_streamlit/Archived/LGBMClassifier.pkl", "rb"))
+
+    # The rest of your code remains unchanged
     list_summary_plot_shap = joblib.load('C:/Users/jerom/projet_7/dashboard_streamlit/Archived/list_summary_plot_shap.joblib')
     X_validation = np.load("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/X_validation_np.npy")
     y_validation = np.load("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/y_validation_np.npy")
@@ -55,7 +84,6 @@ def load_model_and_data():
     val_set_pred_proba.set_index("SK_ID_CURR", inplace=True)
 
     return lgbm_clf, list_summary_plot_shap, X_validation, y_validation, X_validation_df, y_validation_df, df_val_sample, val_set_pred_proba, train_set_pred_proba, data_rfecv, importance_results
-
 
 def calculate_probabilities(lgbm_clf, X_validation):
     y_proba_validation = lgbm_clf.predict_proba(X_validation)[:, 1]
@@ -166,18 +194,32 @@ def plot_shap_bar_plot(shap_values, features, feature_names, max_display=10):
     shap.bar_plot(shap_values, feature_names=feature_names, max_display=max_display)
     st.pyplot(plt.gcf())
 
+import streamlit as st
+
 
 def main():
     configure_page()
+
     lgbm_clf, list_summary_plot_shap, X_validation, y_validation, X_validation_df, y_validation_df, df_val_sample, val_set_pred_proba, train_set_pred_proba, data_rfecv, importance_results = load_model_and_data()
     y_proba_validation = calculate_probabilities(lgbm_clf, X_validation)
     min_seuil_val = optimal_threshold()
     y_true = y_validation.flatten()
-    cout = metier_cost(y_true, y_proba_validation > min_seuil_val)
+    MLFLOW_URI = 'http://127.0.0.1:8001/invocations'
+    data = X_validation
+
+
+    # Request predictions from the MLflow model server
+    pred = request_prediction(MLFLOW_URI, data)
+
+    # Calculate metier cost
+    cout = metier_cost(y_true, pred["predictions"] > min_seuil_val)
+
+    # Display the credit approval gauge
+   # draw_credit_approval_gauge(client_id="selected_client_id", default_probability=pred["predictions"][0])
+
+    # Display other model results
     display_model_results(lgbm_clf, min_seuil_val, y_proba_validation, y_true, val_set_pred_proba, X_validation_df, y_validation_df)
     st.write(f"Coût métier : {cout}")
-
-
 
 if __name__ == "__main__":
     main()
