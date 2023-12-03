@@ -1,3 +1,1 @@
-# OCR_P7_data_sciences_scoring_model
-# OCR_P7_data_sciences_scoring_model
 # OCR_Projet_7_Implementez_un_modele_de_scoring
