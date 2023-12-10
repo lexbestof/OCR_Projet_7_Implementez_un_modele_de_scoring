@@ -12,6 +12,7 @@ from PIL import Image
 import plotly.graph_objects as go
 import plotly.express as px
 import requests
+import mlflow.sklearn
 from matplotlib.patches import Rectangle, FancyArrowPatch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
@@ -39,10 +40,10 @@ def configure_page():
         </style> """,
         unsafe_allow_html=True)
 
+
 def request_prediction(model_uri, data):
     headers = {"Content-Type": "application/json"}
 
-    # Convertir le DataFrame ou le tableau NumPy en un format attendu par le modèle MLflow
     if isinstance(data, pd.DataFrame):
         input_data = {"instances": data.to_dict(orient='records')}
     elif isinstance(data, np.ndarray):
@@ -60,16 +61,19 @@ def request_prediction(model_uri, data):
     return response.json()
 
 
-import mlflow.sklearn
-
 def load_model_and_data():
-    # Use the model URI from MLflow
-    #model_uri = "runs:/b441ac36ae5d4af3b29bb2134a1606a1/mlflow_model"
+    # Spécifier le chemin où le modèle MLflow a été sauvegardé
+    model_path = "C:/Users/jerom/projet_7/dashboard_streamlit/mlflow_model"
 
-    # Load the LightGBM model from MLflow
-    lgbm_clf = pickle.load(open("C:/Users/jerom/projet_7/dashboard_streamlit/Archived/LGBMClassifier.pkl", "rb"))
+    # Charger le modèle depuis MLflow
+    model = mlflow.sklearn.load_model(model_path)
 
-    # The rest of your code remains unchanged
+
+
+    # Load the LightGBM model
+    # lgbm_clf = pickle.load(open("C:/Users/jerom/projet_7/dashboard_streamlit/Archived/LGBMClassifier.pkl", "rb"))
+
+    
     list_summary_plot_shap = joblib.load('C:/Users/jerom/projet_7/dashboard_streamlit/Archived/list_summary_plot_shap.joblib')
     X_validation = np.load("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/X_validation_np.npy")
     y_validation = np.load("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/y_validation_np.npy")
@@ -83,10 +87,10 @@ def load_model_and_data():
         open('C:/Users/jerom/projet_7/dashboard_streamlit/Archived/results_permutation_importance.pkl', 'rb'))
     val_set_pred_proba.set_index("SK_ID_CURR", inplace=True)
 
-    return lgbm_clf, list_summary_plot_shap, X_validation, y_validation, X_validation_df, y_validation_df, df_val_sample, val_set_pred_proba, train_set_pred_proba, data_rfecv, importance_results
+    return model, list_summary_plot_shap, X_validation, y_validation, X_validation_df, y_validation_df, df_val_sample, val_set_pred_proba, train_set_pred_proba, data_rfecv, importance_results
 
-def calculate_probabilities(lgbm_clf, X_validation):
-    y_proba_validation = lgbm_clf.predict_proba(X_validation)[:, 1]
+def calculate_probabilities(model, X_validation):
+    y_proba_validation = model.predict_proba(X_validation)[:, 1]
     return y_proba_validation
 
 
@@ -104,7 +108,7 @@ def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
     return cout
 
 
-def display_model_results(lgbm_clf, min_seuil_val, y_proba_validation, y_true, val_set_pred_proba, X_validation_df, y_validation_df):
+def display_model_results(model, min_seuil_val, y_proba_validation, y_true, val_set_pred_proba, X_validation_df, y_validation_df):
  
     st.title("Dashboard d'Évaluation du Modèle")
     st.subheader("Résultats du Modèle")
@@ -113,20 +117,26 @@ def display_model_results(lgbm_clf, min_seuil_val, y_proba_validation, y_true, v
     st.markdown(f"Seuil optimal : {min_seuil_val}")
 
     st.subheader("Jauge Colorée pour le Score")
+    # Utiliser un slider pour choisir le seuil
+    min_seuil_val = st.slider("Sélectionnez le seuil", min_value=0.0, max_value=1.0, value=min_seuil_val, step=0.01)
+
     pourcentage_score = int(y_proba_validation[0] * 100)
+
+    # Utiliser le widget progress pour afficher la jauge
     score_jauge = st.progress(pourcentage_score)
     score_jauge.progress(int(min_seuil_val * 100))
 
-    explainer = shap.TreeExplainer(lgbm_clf)
+    explainer = shap.TreeExplainer(model)
     X_val_new_df = X_validation_df  # Use X_validation_df directly
     sample_idx = X_val_new_df.sample(1).index[0]
-    predicted_class = int(lgbm_clf.predict(X_val_new_df.loc[[sample_idx]]))
+    predicted_class = int(model.predict(X_val_new_df.loc[[sample_idx]]))
     shap_values = explainer.shap_values(X_val_new_df.loc[[sample_idx]])[predicted_class]
 
     selected_client = st.selectbox("Sélectionnez un client :", val_set_pred_proba.index)
     
     st.subheader("Affichage du résultat de la prédiction")
     prediction_value = int(val_set_pred_proba.loc[selected_client, 'pred_proba'] > min_seuil_val)
+    prediction_proba = val_set_pred_proba.loc[selected_client, 'pred_proba']
 
     if prediction_value == 1:
         st.write("**Crédit Refusé**", unsafe_allow_html=True, key="credit_refused")
@@ -134,6 +144,16 @@ def display_model_results(lgbm_clf, min_seuil_val, y_proba_validation, y_true, v
     else:
         st.write("**Crédit Accordé**", key="credit_accepted")
         st.write("Félicitations! Le modèle prédit que le crédit peut être accordé.")
+
+        # Utiliser la probabilité brute pour déterminer la probabilité d'acceptation du crédit
+        true_proba = 1 - prediction_proba
+        st.write(f"La probabilité de remboursement du crédit est {true_proba:.2%}")
+        # Identifier les clients susceptibles de faire défaut
+        seuil_default = 0.5  #seuil à ajuster au besoin
+        if prediction_proba > seuil_default:
+            st.write("**Client susceptible de faire défaut**")
+        else:
+            st.write("**Client peu susceptible de faire défaut**")
         
     st.subheader("Importance des variables pour un échantillon individuel")
 
@@ -194,19 +214,22 @@ def plot_shap_bar_plot(shap_values, features, feature_names, max_display=10):
     shap.bar_plot(shap_values, feature_names=feature_names, max_display=max_display)
     st.pyplot(plt.gcf())
 
-import streamlit as st
+
+def get_predictions(model_uri, data):
+    pred = request_prediction(model_uri, data)
+    return pred["predictions"]
 
 
 def main():
     configure_page()
 
-    lgbm_clf, list_summary_plot_shap, X_validation, y_validation, X_validation_df, y_validation_df, df_val_sample, val_set_pred_proba, train_set_pred_proba, data_rfecv, importance_results = load_model_and_data()
-    y_proba_validation = calculate_probabilities(lgbm_clf, X_validation)
+    model, list_summary_plot_shap, X_validation, y_validation, X_validation_df, y_validation_df, df_val_sample, val_set_pred_proba, train_set_pred_proba, data_rfecv, importance_results = load_model_and_data()
+    y_proba_validation = calculate_probabilities(model, X_validation)
+
     min_seuil_val = optimal_threshold()
     y_true = y_validation.flatten()
     MLFLOW_URI = 'http://127.0.0.1:8001/invocations'
     data = X_validation
-
 
     # Request predictions from the MLflow model server
     pred = request_prediction(MLFLOW_URI, data)
@@ -215,11 +238,12 @@ def main():
     cout = metier_cost(y_true, pred["predictions"] > min_seuil_val)
 
     # Display the credit approval gauge
-   # draw_credit_approval_gauge(client_id="selected_client_id", default_probability=pred["predictions"][0])
+    # draw_credit_approval_gauge(client_id="selected_client_id", default_probability=pred["predictions"][0])
 
     # Display other model results
-    display_model_results(lgbm_clf, min_seuil_val, y_proba_validation, y_true, val_set_pred_proba, X_validation_df, y_validation_df)
+    display_model_results(model, min_seuil_val, y_proba_validation, y_true, val_set_pred_proba, X_validation_df, y_validation_df)
     st.write(f"Coût métier : {cout}")
 
 if __name__ == "__main__":
     main()
+
