@@ -14,7 +14,6 @@ import requests
 import mlflow.sklearn
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
-import scikitplot as skplt
 import os
 
 def configure_page():
