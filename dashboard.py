@@ -17,7 +17,7 @@ from matplotlib.patches import Rectangle, FancyArrowPatch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
 import scikitplot as skplt
-
+import os
 
 def configure_page():
     st.set_page_config(
@@ -63,34 +63,60 @@ def request_prediction(model_uri, data):
 
 def load_model_and_data():
     # Spécifier le chemin où le modèle MLflow a été sauvegardé
-    model_path = "C:/Users/jerom/projet_7/dashboard_streamlit/mlflow_model"
+    model_path = "C:/Users/jerom/projet_7/dashboard_streamlit/mlflow_model_1"
 
     # Charger le modèle depuis MLflow
     model = mlflow.sklearn.load_model(model_path)
 
+    # Charger les autres fichiers en utilisant des chemins relatifs
+    archived_folder = "C:/Users/jerom/projet_7/dashboard_streamlit/Archived"
+    #list_summary_plot_shap = joblib.load(os.path.join(archived_folder, 'list_summary_plot_shap.joblib'))
 
+    cleaned_folder = "C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned"
+    X_validation = np.load(os.path.join(cleaned_folder, "X_validation_np.npy"))
+    y_validation = np.load(os.path.join(cleaned_folder, "y_validation_np.npy"))
+    X_validation_df = pd.read_csv(os.path.join(cleaned_folder, "X_validation.csv"))
+    y_validation_df = pd.read_csv(os.path.join(cleaned_folder, "y_validation.csv"))
 
-    # Load the LightGBM model
-    # lgbm_clf = pickle.load(open("C:/Users/jerom/projet_7/dashboard_streamlit/Archived/LGBMClassifier.pkl", "rb"))
+    src_folder = "C:/Users/jerom/projet_7/dashboard_streamlit/src"
+    df_val_sample = joblib.load(os.path.join(src_folder, 'df_val_sample.joblib'))
 
-    
-    list_summary_plot_shap = joblib.load('C:/Users/jerom/projet_7/dashboard_streamlit/Archived/list_summary_plot_shap.joblib')
-    X_validation = np.load("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/X_validation_np.npy")
-    y_validation = np.load("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/y_validation_np.npy")
-    X_validation_df = pd.read_csv("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/X_validation.csv")
-    y_validation_df = pd.read_csv("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/y_validation.csv")
-    df_val_sample = joblib.load("C:/Users/jerom/projet_7/dashboard_streamlit/src/df_val_sample.joblib")
-    val_set_pred_proba = pd.read_csv("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/val_set_pred_proba.csv")
-    train_set_pred_proba = pd.read_csv("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/train_set_pred_proba.csv")
-    data_rfecv = pd.read_csv("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/data_rfecv.csv")
+    val_set_pred_proba = pd.read_csv(os.path.join(cleaned_folder, "val_set_pred_proba.csv"))
+    #train_set_pred_proba = pd.read_csv(os.path.join(cleaned_folder, "train_set_pred_proba.csv"))
+
+    #data_rfecv = pd.read_csv(os.path.join(cleaned_folder, "data_rfecv.csv"))
     importance_results = pickle.load(
-        open('C:/Users/jerom/projet_7/dashboard_streamlit/Archived/results_permutation_importance.pkl', 'rb'))
+        open(os.path.join(archived_folder, 'results_permutation_importance.pkl'), 'rb'))
+
     val_set_pred_proba.set_index("SK_ID_CURR", inplace=True)
 
-    return model, list_summary_plot_shap, X_validation, y_validation, X_validation_df, y_validation_df, df_val_sample, val_set_pred_proba, train_set_pred_proba, data_rfecv, importance_results
+    return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results
 
-def calculate_probabilities(model, X_validation):
-    y_proba_validation = model.predict_proba(X_validation)[:, 1]
+
+
+def calculate_probabilities(model_uri, X_validation):
+    headers = {"Content-Type": "application/json"}
+
+    if isinstance(X_validation, pd.DataFrame):
+        input_data = {"instances": X_validation.to_dict(orient='records')}
+    elif isinstance(X_validation, np.ndarray):
+        input_data = {"instances": X_validation.tolist()}
+    else:
+        raise ValueError("Unsupported data type. Use DataFrame or numpy array.")
+
+    # Remove "/invocations" from model_uri
+    response = requests.post(
+        url=model_uri,  # Model URI without "/invocations"
+        headers=headers,
+        json=input_data
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"Request failed with status {response.status_code}, {response.text}")
+
+    predictions = response.json()["predictions"]
+    y_proba_validation = np.array(predictions)[:]
+
     return y_proba_validation
 
 
@@ -116,7 +142,7 @@ def display_model_results(model, min_seuil_val, y_proba_validation, y_true, val_
     st.subheader("Seuil Optimal")
     st.markdown(f"Seuil optimal : {min_seuil_val}")
 
-    st.subheader("Jauge Colorée pour le Score")
+
     # Utiliser un slider pour choisir le seuil
     min_seuil_val = st.slider("Sélectionnez le seuil", min_value=0.0, max_value=1.0, value=min_seuil_val, step=0.01)
 
@@ -223,25 +249,18 @@ def get_predictions(model_uri, data):
 def main():
     configure_page()
 
-    model, list_summary_plot_shap, X_validation, y_validation, X_validation_df, y_validation_df, df_val_sample, val_set_pred_proba, train_set_pred_proba, data_rfecv, importance_results = load_model_and_data()
-    y_proba_validation = calculate_probabilities(model, X_validation)
-
+    model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results = load_model_and_data()
+    
     min_seuil_val = optimal_threshold()
     y_true = y_validation.flatten()
-    MLFLOW_URI = 'http://127.0.0.1:8001/invocations'
-    data = X_validation
-
-    # Request predictions from the MLflow model server
-    pred = request_prediction(MLFLOW_URI, data)
+    MLFLOW_URI = 'http://127.0.0.1:8001/invocations'  # Model URI without "/invocations"
+    predictions = get_predictions(MLFLOW_URI, X_validation)
 
     # Calculate metier cost
-    cout = metier_cost(y_true, pred["predictions"] > min_seuil_val)
-
-    # Display the credit approval gauge
-    # draw_credit_approval_gauge(client_id="selected_client_id", default_probability=pred["predictions"][0])
+    cout = metier_cost(y_true, predictions > min_seuil_val)
 
     # Display other model results
-    display_model_results(model, min_seuil_val, y_proba_validation, y_true, val_set_pred_proba, X_validation_df, y_validation_df)
+    display_model_results(model, min_seuil_val, predictions, y_true, val_set_pred_proba, X_validation_df, y_validation_df)
     st.write(f"Coût métier : {cout}")
 
 if __name__ == "__main__":

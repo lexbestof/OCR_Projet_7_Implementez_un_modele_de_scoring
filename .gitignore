@@ -1,0 +1,10 @@
+.ipynb_checkpoints/
+Api_ml/
+Archived/
+Cleaned/
+__pycache__/
+mlflow_model/
+mlflow_model_1/
+mlruns/
+src/
+templates/
