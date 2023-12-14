@@ -21,3 +21,4 @@ streamlit
 pandas
 scikit-learn
 streamlit-shap
+matplotlib.pyplot
