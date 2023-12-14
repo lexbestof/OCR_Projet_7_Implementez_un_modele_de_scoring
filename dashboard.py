@@ -1,6 +1,6 @@
 # Importation des bibliothèques nécessaires
 import streamlit as st
-from streamlit_shap import st_shap
+#from streamlit_shap import st_shap
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, FancyArrowPatch
 import pandas as pd
@@ -13,7 +13,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 import requests
 import mlflow.sklearn
-from matplotlib.patches import Rectangle, FancyArrowPatch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
 import scikitplot as skplt
