@@ -1,8 +1,9 @@
 # Importation des bibliothèques nécessaires
 import streamlit as st
-#from streamlit_shap import st_shap
+from streamlit_shap import st_shap
+import matplotlib
+matplotlib.use('TkAgg') 
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, FancyArrowPatch
 import pandas as pd
 import numpy as np
 import joblib
