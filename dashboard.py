@@ -1,4 +1,6 @@
 # Importation des bibliothèques nécessaires
+from azure.storage.blob import BlobServiceClient
+from io import BytesIO
 import streamlit as st
 from streamlit_shap import st_shap
 import matplotlib.pyplot as plt
@@ -15,6 +17,7 @@ import mlflow.sklearn
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
 import os
+import shutil
 
 def configure_page():
     st.set_page_config(
@@ -57,35 +60,58 @@ def request_prediction(model_uri, data):
 
     return response.json()
 
+def download_blob_as_bytes(blob_client):
+    return blob_client.download_blob().readall()
+
+def load_data_from_blob(blob_service_client, container_name, data_name, loader_func):
+    blob_client_data = blob_service_client.get_blob_client(container=container_name, blob=data_name)
+    data_bytes = download_blob_as_bytes(blob_client_data)
+
+    # Check if loader_func is pickle.load and handle accordingly
+    if loader_func == pickle.load:
+        with BytesIO(data_bytes) as file:
+            return loader_func(file)
+    # Check if loader_func is np.load and handle accordingly
+    elif loader_func == np.load:
+        with BytesIO(data_bytes) as file:
+            return loader_func(file, allow_pickle=True)
+    # Check if loader_func is pd.read_csv and handle accordingly
+    elif loader_func == pd.read_csv:
+        with BytesIO(data_bytes) as file:
+            return loader_func(file, encoding='utf-8')
+    # Check if loader_func is joblib.load and handle accordingly
+    elif loader_func == joblib.load:
+        with BytesIO(data_bytes) as file:
+            return loader_func(file)
+    else:
+        return loader_func(data_bytes)
+    
+def load_model_from_blob(blob_service_client, container_name, model_name):
+    blob_client_model = blob_service_client.get_blob_client(container=container_name, blob=model_name)
+    model_bytes = download_blob_as_bytes(blob_client_model)
+    return pickle.loads(model_bytes)
+
 
 def load_model_and_data():
-    # Spécifier le chemin où le modèle MLflow a été sauvegardé
-    model_path = "C:/Users/jerom/projet_7/dashboard_streamlit/mlflow_model_1"
+    # Load other artifacts from Azure Blob Storage
+    account_name = "projet7ocrscor9718876976"
+    account_key = "KjFREPbKDYnZoilBu8J4g4O9UeAWnjQqkmaUnh9uhcAsE3Bab+YFycRASbHm8B/y0LimiIffjEVX+AStTMv6QQ=="
+    container_name = "mlflow-model"
 
-    # Charger le modèle depuis MLflow
-    model = mlflow.sklearn.load_model(model_path)
+    blob_service_client = BlobServiceClient(account_url=f"https://{account_name}.blob.core.windows.net", credential=account_key)
 
-    # Charger les autres fichiers en utilisant des chemins relatifs
-    archived_folder = "C:/Users/jerom/projet_7/dashboard_streamlit/Archived"
-    #list_summary_plot_shap = joblib.load(os.path.join(archived_folder, 'list_summary_plot_shap.joblib'))
+    importance_results = load_data_from_blob(blob_service_client, container_name, "results_permutation_importance.pkl", pickle.load)
+    X_validation = load_data_from_blob(blob_service_client, container_name, "X_validation_np.npy", np.load)
+    y_validation = load_data_from_blob(blob_service_client, container_name, "y_validation_np.npy", np.load)
+    X_validation_df = load_data_from_blob(blob_service_client, container_name, "X_validation.csv", pd.read_csv)
+    y_validation_df = load_data_from_blob(blob_service_client, container_name, "y_validation.csv", pd.read_csv)
 
-    cleaned_folder = "C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned"
-    X_validation = np.load(os.path.join(cleaned_folder, "X_validation_np.npy"))
-    y_validation = np.load(os.path.join(cleaned_folder, "y_validation_np.npy"))
-    X_validation_df = pd.read_csv(os.path.join(cleaned_folder, "X_validation.csv"))
-    y_validation_df = pd.read_csv(os.path.join(cleaned_folder, "y_validation.csv"))
+    # Load the MLflow model from Azure Blob Storage
+    model_path = "mlflow_model_1/model.pkl"
+    model = load_model_from_blob(blob_service_client, container_name, model_path)
 
-    src_folder = "C:/Users/jerom/projet_7/dashboard_streamlit/src"
-    df_val_sample = joblib.load(os.path.join(src_folder, 'df_val_sample.joblib'))
-
-    val_set_pred_proba = pd.read_csv(os.path.join(cleaned_folder, "val_set_pred_proba.csv"))
-    #train_set_pred_proba = pd.read_csv(os.path.join(cleaned_folder, "train_set_pred_proba.csv"))
-
-    #data_rfecv = pd.read_csv(os.path.join(cleaned_folder, "data_rfecv.csv"))
-    importance_results = pickle.load(
-        open(os.path.join(archived_folder, 'results_permutation_importance.pkl'), 'rb'))
-
-    val_set_pred_proba.set_index("SK_ID_CURR", inplace=True)
+    df_val_sample = load_data_from_blob(blob_service_client, container_name, "df_val_sample.joblib", joblib.load)
+    val_set_pred_proba = load_data_from_blob(blob_service_client, container_name, "val_set_pred_proba.csv", lambda x: pd.read_csv(BytesIO(x)).set_index("SK_ID_CURR"))
 
     return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results
 
@@ -250,7 +276,7 @@ def main():
     
     min_seuil_val = optimal_threshold()
     y_true = y_validation.flatten()
-    MLFLOW_URI = 'http://127.0.0.1:8001/invocations'  # Model URI without "/invocations"
+    MLFLOW_URI = 'http://127.0.0.1:8001/invocations'  
     predictions = get_predictions(MLFLOW_URI, X_validation)
 
     # Calculate metier cost
