@@ -113,8 +113,15 @@ def load_model_and_data():
     df_val_sample = load_data_from_blob(blob_service_client, container_name, "df_val_sample.joblib", joblib.load)
     val_set_pred_proba = load_data_from_blob(blob_service_client, container_name, "val_set_pred_proba.csv", lambda x: pd.read_csv(BytesIO(x)).set_index("SK_ID_CURR"))
 
-    return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results
+    # Load min_seuil_val directly in the function
+    model_name = "optimum_threshold.joblib"
+    min_seuil_val = load_data_from_blob(blob_service_client, container_name, model_name, joblib.load)
 
+    # Load df_predictproba directly in the function
+    data_name = "df_predictproba.csv"
+    df_predictproba = load_data_from_blob(blob_service_client, container_name, data_name, pd.read_csv)
+
+    return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba
 
 
 def calculate_probabilities(model_uri, X_validation):
@@ -143,8 +150,7 @@ def calculate_probabilities(model_uri, X_validation):
     return y_proba_validation
 
 
-def optimal_threshold():
-    min_seuil_val = joblib.load("C:/Users/jerom/projet_7/dashboard_streamlit/Api_ml/optimum_threshold.joblib")
+def optimal_threshold(min_seuil_val):
     return min_seuil_val
 
 
@@ -157,7 +163,7 @@ def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
     return cout
 
 
-def display_model_results(model, min_seuil_val, y_proba_validation, y_true, val_set_pred_proba, X_validation_df, y_validation_df):
+def display_model_results(model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba):
  
     st.title("Dashboard d'Évaluation du Modèle")
     st.subheader("Résultats du Modèle")
@@ -243,7 +249,6 @@ def display_model_results(model, min_seuil_val, y_proba_validation, y_true, val_
     shap.summary_plot(shap_values, features=X_val_new_df.loc[[sample_idx]], feature_names=X_val_new_df.columns)
     st.pyplot(fig_summary_plot)
 
-    df_predictproba = pd.read_csv("C:/Users/jerom/projet_7/dashboard_streamlit/Cleaned/df_predictproba.csv")
     ser_predictproba_true0 = df_predictproba.loc[df_predictproba['y_true'] == 0, 'y_predict_proba']
     ser_predictproba_true1 = df_predictproba.loc[df_predictproba['y_true'] == 1, 'y_predict_proba']
 
@@ -272,9 +277,9 @@ def get_predictions(model_uri, data):
 def main():
     configure_page()
 
-    model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results = load_model_and_data()
-    
-    min_seuil_val = optimal_threshold()
+    model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba = load_model_and_data()
+
+    min_seuil_val = optimal_threshold(min_seuil_val)
     y_true = y_validation.flatten()
     MLFLOW_URI = 'http://127.0.0.1:8001/invocations'  
     predictions = get_predictions(MLFLOW_URI, X_validation)
@@ -283,9 +288,12 @@ def main():
     cout = metier_cost(y_true, predictions > min_seuil_val)
 
     # Display other model results
-    display_model_results(model, min_seuil_val, predictions, y_true, val_set_pred_proba, X_validation_df, y_validation_df)
+    display_model_results(model, X_validation, y_validation, predictions, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba)
+
     st.write(f"Coût métier : {cout}")
 
 if __name__ == "__main__":
+    main()
+
     main()
 
