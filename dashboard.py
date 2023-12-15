@@ -40,7 +40,6 @@ def configure_page():
         </style> """,
         unsafe_allow_html=True)
 
-
 def request_prediction(model_uri, data):
     headers = {"Content-Type": "application/json"}
 
@@ -294,6 +293,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    main()
-
