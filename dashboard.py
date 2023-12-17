@@ -1,6 +1,7 @@
 # Importation des bibliothèques nécessaires
 from azure.storage.blob import BlobServiceClient
 from io import BytesIO
+import platform
 import streamlit as st
 from streamlit_shap import st_shap
 import matplotlib.pyplot as plt
@@ -280,7 +281,11 @@ def main():
 
     min_seuil_val = optimal_threshold(min_seuil_val)
     y_true = y_validation.flatten()
-    MLFLOW_URI = 'http://127.0.0.1:8001/invocations'  
+        # Check if the code is running on a local machine
+    if platform.system() == 'Windows':  
+        MLFLOW_URI = 'http://127.0.0.1:8001/invocations'
+    else:  # Assume it's running on the server
+        MLFLOW_URI = 'https://projet-7-ocr-scoring-model-work.eastus2.inference.ml.azure.com/score'
     predictions = get_predictions(MLFLOW_URI, X_validation)
 
     # Calculate metier cost
