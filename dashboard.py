@@ -17,6 +17,7 @@ import requests
 import mlflow.sklearn
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
+import socket
 import os
 import shutil
 
@@ -281,20 +282,34 @@ def main():
 
     min_seuil_val = optimal_threshold(min_seuil_val)
     y_true = y_validation.flatten()
-        # Check if the code is running on a local machine
-    if platform.system() == 'Windows':  
-        MLFLOW_URI = 'http://127.0.0.1:8001/invocations'
-    else:  # Assume it's running on the server
-        MLFLOW_URI = 'https://projet-7-ocr-scoring-model-work.eastus2.inference.ml.azure.com/score'
+
+    # Vérifier si l'API REST locale est disponible
+    local_mlflow_uri = 'http://127.0.0.1:8001/invocations'
+    is_local_mlflow_available = check_api_availability(local_mlflow_uri)
+
+    # Utiliser l'adresse locale si disponible, sinon utiliser l'adresse en ligne du serveur Azure
+    MLFLOW_URI = local_mlflow_uri if is_local_mlflow_available else 'https://projet-7-ocr-scoring-model-work.eastus2.inference.ml.azure.com/score'
+
     predictions = get_predictions(MLFLOW_URI, X_validation)
 
-    # Calculate metier cost
+    # Calculer le coût métier
     cout = metier_cost(y_true, predictions > min_seuil_val)
 
-    # Display other model results
+    # Afficher les autres résultats du modèle
     display_model_results(model, X_validation, y_validation, predictions, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba)
 
     st.write(f"Coût métier : {cout}")
+
+# Fonction pour vérifier la disponibilité de l'API locale
+def check_api_availability(api_uri):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)
+
+    # Essayez de se connecter à l'adresse locale
+    result = sock.connect_ex(('127.0.0.1', 8001))
+    sock.close()
+
+    return result == 0
 
 if __name__ == "__main__":
     main()
