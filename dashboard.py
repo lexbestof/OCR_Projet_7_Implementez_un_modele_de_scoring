@@ -108,7 +108,7 @@ def load_model_and_data():
     y_validation_df = load_data_from_blob(blob_service_client, container_name, "y_validation.csv", pd.read_csv)
 
     # Load the MLflow model from Azure Blob Storage
-    model_path = "mlflow_model_1/model.pkl"
+    model_path = "mlflow_model/model.pkl"
     model = load_model_from_blob(blob_service_client, container_name, model_path)
 
     df_val_sample = load_data_from_blob(blob_service_client, container_name, "df_val_sample.joblib", joblib.load)
@@ -284,13 +284,14 @@ def main():
     y_true = y_validation.flatten()
 
     # Vérifier si l'API REST locale est disponible
+    # mlflow models serve -m mlflow_model --host 127.0.0.1 --port 8001
     local_mlflow_uri = 'http://127.0.0.1:8001/invocations'
     is_local_mlflow_available = check_api_availability(local_mlflow_uri)
 
     # Utiliser l'adresse locale si disponible, sinon utiliser l'adresse en ligne du serveur Azure
-    MLFLOW_URI = local_mlflow_uri if is_local_mlflow_available else 'https://projet-7-ocr-scoring-model-work.eastus2.inference.ml.azure.com/score'
+    MLFLOW_URI = local_mlflow_uri if is_local_mlflow_available else 'https://projet-7-ocr-scoring-model.eastus2.inference.ml.azure.com/score'
 
-    predictions = get_predictions(MLFLOW_URI, X_validation)
+    predictions = get_predictions(MLFLOW_URI, X_validation_df)
 
     # Calculer le coût métier
     cout = metier_cost(y_true, predictions > min_seuil_val)
