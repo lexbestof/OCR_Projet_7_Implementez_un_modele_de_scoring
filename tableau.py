@@ -7,6 +7,7 @@ import json
 import os
 import ssl
 import platform
+from shap.plots import initjs
 import streamlit as st
 from streamlit_shap import st_shap
 import matplotlib.pyplot as plt
@@ -24,7 +25,6 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve, auc
 import socket
 import os
-import shutil
 
 def configure_page():
     st.set_page_config(
@@ -585,7 +585,7 @@ def get_predictions_api(client_id, data_array):
 
 def main():
     configure_page()
-
+    initjs
     model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba = load_model_and_data()
 
     min_seuil_val = optimal_threshold(min_seuil_val)
