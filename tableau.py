@@ -519,8 +519,14 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
 
 
     force_plot = shap.force_plot(explainer.expected_value[predicted_class], shap_values[0],
-                                X_val_new_df.loc[[sample_idx]])
-    st.components.v1.html(shap.getjs() + force_plot._repr_html_(), height=600, scrolling=True)
+                             X_val_new_df.loc[[sample_idx]])
+
+    # Convertir le graphique force_plot en HTML
+    force_plot_html = shap.getjs() + force_plot._repr_html_()
+
+    # Afficher le HTML dans Streamlit
+    st.components.v1.html(force_plot_html, height=600, scrolling=True)
+    
 
     st.subheader("Analyse des variables")
 
