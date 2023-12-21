@@ -54,7 +54,7 @@ def request_prediction(model_uri, data):
 
     response = requests.request(
         method='POST', headers=headers, url=model_uri, json=input_data)
-
+    
     if response.status_code != 200:
         raise Exception(
             f"Request failed with status {response.status_code}, {response.text}")
@@ -289,6 +289,8 @@ def main():
     is_local_mlflow_available = check_api_availability(local_mlflow_uri)
 
     # Utiliser l'adresse locale si disponible, sinon utiliser l'adresse en ligne du serveur Azure
+    #Note ce code ne marche pas avec le modèle serveur d'Azure studio
+    #Le code spécial avec Azure studio a été effectué ailleurs.
     MLFLOW_URI = local_mlflow_uri if is_local_mlflow_available else 'https://projet-7-ocr-scoring-model.eastus2.inference.ml.azure.com/score'
 
     predictions = get_predictions(MLFLOW_URI, X_validation_df)
