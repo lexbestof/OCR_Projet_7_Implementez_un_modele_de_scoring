@@ -483,7 +483,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     # Utiliser le widget progress pour afficher la jauge
     score_jauge = st.progress(pourcentage_score)
     score_jauge.progress(int(min_seuil_val * 100))
-    shap.initjs()
+
     explainer = shap.TreeExplainer(model)
     X_val_new_df = X_validation_df  # Use X_validation_df directly
     sample_idx = X_val_new_df.sample(1).index[0]
@@ -516,6 +516,8 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     st.subheader("Importance des variables pour un échantillon individuel")
 
     plot_shap_bar_plot(shap_values[0], X_val_new_df, X_val_new_df.columns, max_display=10)
+
+
     force_plot = shap.force_plot(explainer.expected_value[predicted_class], shap_values[0],
                                 X_val_new_df.loc[[sample_idx]])
     st.components.v1.html(shap.getjs() + force_plot._repr_html_(), height=600, scrolling=True)
