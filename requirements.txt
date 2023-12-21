@@ -21,5 +21,4 @@ streamlit==1.29.0
 streamlit_shap==1.0.2
 plotly==5.18.0
 azure-stoage-blob==12.19.0
-ipython==8.12.0
 shap==0.43.0
