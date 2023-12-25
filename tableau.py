@@ -266,10 +266,10 @@ def load_model_and_data():
 
     # Nous allons utiliser un échantillon de 1000 clients 
     importance_results = load_data_from_blob(blob_service_client, container_name, "results_permutation_importance.pkl", pickle.load)
-    X_validation = load_data_from_blob(blob_service_client, container_name, "X_validation_sample_np.npy", np.load)
-    y_validation = load_data_from_blob(blob_service_client, container_name, "y_validation_sample_np.npy", np.load)
-    X_validation_df = load_data_from_blob(blob_service_client, container_name, "X_validation_sample_df.csv", pd.read_csv)
-    y_validation_df = load_data_from_blob(blob_service_client, container_name, "y_validation_sample_df.csv", pd.read_csv)
+    X_validation = load_data_from_blob(blob_service_client, container_name, "X_validation_np.npy", np.load)
+    y_validation = load_data_from_blob(blob_service_client, container_name, "y_validation_np.npy", np.load)
+    X_validation_df = load_data_from_blob(blob_service_client, container_name, "X_validation.csv", pd.read_csv)
+    y_validation_df = load_data_from_blob(blob_service_client, container_name, "y_validation.csv", pd.read_csv)
 
     # Load the MLflow model from Azure Blob Storage
     model_path = "mlflow_model/model.pkl"
@@ -599,24 +599,24 @@ def main():
 
     allowSelfSignedHttps(True)
 
-    
+    for index in X_validation_df[:25].index:
+        client_id = index
 
-  
-    selected_client = st.selectbox("Sélectionnez un client :", X_validation_df.index)
-    client_id = selected_client
+    
 
     # Extraire le data_array depuis X_validation
-    data_to_send = X_validation[client_id].tolist()
+        data_to_send = X_validation[client_id].tolist()
 
 
-    # appaler la fonction request_api  avec client_id et data_to_send
-    predictions = request_api(client_id, data_to_send)
+    # appeler la fonction request_api  avec client_id et data_to_send
+        predictions = request_api(client_id, data_to_send)
+    #Afficher les valeurs de prédiction afin de voir leurs structures
     
-    print(f"Valeurs de api_prediction_proba pour le client {client_id} : {predictions}")
+        print(f"Valeurs de api_prediction_proba pour le client {client_id} : {predictions}")
 
     # Calculer le coût métier
     # Utiliser min_seuil_val directement pour calculer le coût
-    cout = metier_cost(y_true, predictions)
+        cout = metier_cost(y_true, predictions)
 
     # Afficher les autres résultats du modèle
     display_model_results(model, X_validation, y_validation, predictions, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba)
