@@ -492,7 +492,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     # Obtenir la probabilité de prédiction depuis l'API pour le client choisi
     selected_client_data = X_validation[selected_client].tolist()
     api_prediction_proba = request_api(selected_client, selected_client_data)
-    
+    print(api_prediction_proba)
     # obtenir les probabilités depuis le fichier local
     prediction_value = int(val_set_pred_proba.loc[selected_client, 'pred_proba'] > min_seuil_val)
     prediction_proba = val_set_pred_proba.loc[selected_client, 'pred_proba']
@@ -598,7 +598,7 @@ def main():
 
     allowSelfSignedHttps(True)
 
-    print(api_prediction_proba)
+    
 
     for index in X_validation_df.index[:10]:  # Afficher seulement les 1000 premiers résultats
     # Extraire client_id:
