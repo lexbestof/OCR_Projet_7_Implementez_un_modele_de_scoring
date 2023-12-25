@@ -209,8 +209,7 @@ def request_api(client_id, data_array):
         predictions = json.loads(result.decode("utf-8"))
         print("Predictions from API:", predictions)
         if predictions is not None:
-            y_proba_validation = np.array(predictions)[:]
-            return y_proba_validation
+            return predictions
         else:
             raise ValueError("Predictions not found in API response")
 
@@ -265,19 +264,22 @@ def load_model_and_data():
 
     blob_service_client = BlobServiceClient(account_url=f"https://{account_name}.blob.core.windows.net", credential=account_key)
 
+    # Nous allons utiliser un échantillon de 1000 clients 
     importance_results = load_data_from_blob(blob_service_client, container_name, "results_permutation_importance.pkl", pickle.load)
-    X_validation = load_data_from_blob(blob_service_client, container_name, "X_validation_np.npy", np.load)
-    y_validation = load_data_from_blob(blob_service_client, container_name, "y_validation_np.npy", np.load)
-    X_validation_df = load_data_from_blob(blob_service_client, container_name, "X_validation.csv", pd.read_csv)
-    y_validation_df = load_data_from_blob(blob_service_client, container_name, "y_validation.csv", pd.read_csv)
+    X_validation = load_data_from_blob(blob_service_client, container_name, "X_validation_sample_np.npy", np.load)
+    y_validation = load_data_from_blob(blob_service_client, container_name, "y_validation_sample_np.npy", np.load)
+    X_validation_df = load_data_from_blob(blob_service_client, container_name, "X_validation_sample_df.csv", pd.read_csv)
+    y_validation_df = load_data_from_blob(blob_service_client, container_name, "y_validation_sample_df.csv", pd.read_csv)
 
     # Load the MLflow model from Azure Blob Storage
     model_path = "mlflow_model/model.pkl"
     model = load_model_from_blob(blob_service_client, container_name, model_path)
 
     df_val_sample = load_data_from_blob(blob_service_client, container_name, "df_val_sample.joblib", joblib.load)
-    val_set_pred_proba = load_data_from_blob(blob_service_client, container_name, "val_set_pred_proba.csv", lambda x: pd.read_csv(BytesIO(x)))#index_col=0
-
+    val_set_pred_proba = load_data_from_blob(blob_service_client, container_name, "val_set_pred_proba.csv", lambda x: pd.read_csv(BytesIO(x)))
+    # Réinitialiser l'index
+    val_set_pred_proba = val_set_pred_proba.reset_index()
+  
 
     # Load min_seuil_val directly in the function
     model_name = "optimum_threshold.joblib"
@@ -416,7 +418,7 @@ def calculate_probabilities_api(client_id, data_array):
         "INSTAL_DAYS_ENTRY_PAYMENT_SUM",
         "INSTAL_COUNT"
         ],
-        "index": [client_id.tolist()],
+        "index": [client_id],
         "data": [data_array]
     },
     "params": {}
@@ -483,44 +485,48 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     # Utiliser le widget progress pour afficher la jauge
     score_jauge = st.progress(pourcentage_score)
     score_jauge.progress(int(min_seuil_val * 100))
-
-    explainer = shap.TreeExplainer(model)
-    X_val_new_df = X_validation_df  # Use X_validation_df directly
-    sample_idx = X_val_new_df.sample(1).index[0]
-    predicted_class = int(model.predict(X_val_new_df.loc[[sample_idx]]))
-    shap_values = explainer.shap_values(X_val_new_df.loc[[sample_idx]])[predicted_class]
+    
 
     selected_client = st.selectbox("Sélectionnez un client :", X_validation_df.index)
     
-    st.subheader("Affichage du résultat de la prédiction")
+    # Obtenir la probabilité de prédiction depuis l'API pour le client choisi
+    selected_client_data = X_validation[selected_client].tolist()
+    api_prediction_proba = request_api(selected_client, selected_client_data)
+    
+    # obtenir les probabilités depuis le fichier local
     prediction_value = int(val_set_pred_proba.loc[selected_client, 'pred_proba'] > min_seuil_val)
     prediction_proba = val_set_pred_proba.loc[selected_client, 'pred_proba']
 
-    if prediction_value == 1:
-        st.write("**Crédit Refusé**", unsafe_allow_html=True, key="credit_refused")
-        st.write("Nous sommes désolés, mais la prédiction du modèle indique que le crédit doit être refusé.")
+    
+    st.header('Résultat de la demande de prêt')
+   
+    if api_prediction_proba == 0:
+        st.success(
+            f"  \n __CREDIT ACCORDÉ__  \n  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__% (inférieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtentiion d'un prêt).  \n "
+        )
     else:
-        st.write("**Crédit Accordé**", key="credit_accepted")
-        st.write("Félicitations! Le modèle prédit que le crédit peut être accordé.")
-
-        # Utiliser la probabilité brute pour déterminer la probabilité d'acceptation du crédit
-        true_proba = 1 - prediction_proba
-        st.write(f"La probabilité de remboursement du crédit est {true_proba:.2%}")
-        # Identifier les clients susceptibles de faire défaut
-        seuil_default = 0.5  #seuil à ajuster au besoin
-        if prediction_proba > seuil_default:
-            st.write("**Client susceptible de faire défaut**")
-        else:
-            st.write("**Client peu susceptible de faire défaut**")
+        st.error(
+            f"__CREDIT REFUSÉ__  \nLa probabilité de défaut de remboursement pour le crédit demandé __{round(100*prediction_proba,1)}__% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  \n "
+        )
+        
+    st.subheader("Importance de variable locale")
         
     st.subheader("Importance des variables pour un échantillon individuel")
 
+    explainer = shap.TreeExplainer(model)
+    X_val_new_df = X_validation_df  # Use X_validation_df directly
+
+    sample_idx = selected_client
+    predicted_class = int(model.predict(X_val_new_df.loc[[sample_idx]]))
+    shap_values = explainer.shap_values(X_val_new_df.loc[[sample_idx]])[predicted_class]
+
     plot_shap_bar_plot(shap_values[0], X_val_new_df, X_val_new_df.columns, max_display=10)
 
+        #à supprimer
 
-    force_plot = shap.force_plot(explainer.expected_value[predicted_class], shap_values[0],
-                                X_val_new_df.loc[[sample_idx]])
-    st.components.v1.html(shap.getjs() + force_plot._repr_html_(), height=600, scrolling=True)
+    #force_plot = shap.force_plot(explainer.expected_value[predicted_class], shap_values[0],
+                                #X_val_new_df.loc[[sample_idx]])
+    #st.components.v1.html(shap.getjs() + force_plot._repr_html_(), height=600, scrolling=True)
 
     st.subheader("Analyse des variables")
 
@@ -591,6 +597,8 @@ def main():
     y_true = y_validation.flatten()
 
     allowSelfSignedHttps(True)
+
+    print(api_prediction_proba)
 
     for index in X_validation_df.index[:10]:  # Afficher seulement les 1000 premiers résultats
     # Extraire client_id:

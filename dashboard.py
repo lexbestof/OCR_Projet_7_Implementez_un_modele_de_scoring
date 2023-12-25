@@ -112,8 +112,10 @@ def load_model_and_data():
     model = load_model_from_blob(blob_service_client, container_name, model_path)
 
     df_val_sample = load_data_from_blob(blob_service_client, container_name, "df_val_sample.joblib", joblib.load)
-    val_set_pred_proba = load_data_from_blob(blob_service_client, container_name, "val_set_pred_proba.csv", lambda x: pd.read_csv(BytesIO(x)).set_index("SK_ID_CURR"))
-
+    val_set_pred_proba = load_data_from_blob(blob_service_client, container_name, "val_set_pred_proba.csv", lambda x: pd.read_csv(BytesIO(x)))
+    # Réinitialiser l'index
+    val_set_pred_proba = val_set_pred_proba.reset_index()
+  
     # Load min_seuil_val directly in the function
     model_name = "optimum_threshold.joblib"
     min_seuil_val = load_data_from_blob(blob_service_client, container_name, model_name, joblib.load)
@@ -125,13 +127,13 @@ def load_model_and_data():
     return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba
 
 
-def calculate_probabilities(model_uri, X_validation):
+def calculate_probabilities(model_uri, X_validation_df):
     headers = {"Content-Type": "application/json"}
 
-    if isinstance(X_validation, pd.DataFrame):
-        input_data = {"instances": X_validation.to_dict(orient='records')}
-    elif isinstance(X_validation, np.ndarray):
-        input_data = {"instances": X_validation.tolist()}
+    if isinstance(X_validation_df, pd.DataFrame):
+        input_data = {"instances": X_validation_df.to_dict(orient='records')}
+    elif isinstance(X_validation_df, np.ndarray):
+        input_data = {"instances": X_validation_df.tolist()}
     else:
         raise ValueError("Unsupported data type. Use DataFrame or numpy array.")
 
@@ -164,18 +166,14 @@ def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
     return cout
 
 
-def display_model_results(model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba):
- 
+def display_model_results(MLFLOW_URI, model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba):
+    
     st.title("Dashboard d'Évaluation du Modèle")
     st.subheader("Résultats du Modèle")
 
     st.subheader("Seuil Optimal")
     st.markdown(f"Seuil optimal : {min_seuil_val}")
-
-
-    # Utiliser un slider pour choisir le seuil
-    min_seuil_val = st.slider("Sélectionnez le seuil", min_value=0.0, max_value=1.0, value=min_seuil_val, step=0.01)
-
+   
     pourcentage_score = int(y_proba_validation[0] * 100)
 
     # Utiliser le widget progress pour afficher la jauge
@@ -183,35 +181,37 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     score_jauge.progress(int(min_seuil_val * 100))
 
     explainer = shap.TreeExplainer(model)
-    X_val_new_df = X_validation_df  # Use X_validation_df directly
-    sample_idx = X_val_new_df.sample(1).index[0]
-    predicted_class = int(model.predict(X_val_new_df.loc[[sample_idx]]))
-    shap_values = explainer.shap_values(X_val_new_df.loc[[sample_idx]])[predicted_class]
-
-    selected_client = st.selectbox("Sélectionnez un client :", val_set_pred_proba.index)
+    X_val_new_df = X_validation_df  # 
+    
+    selected_client = st.selectbox("Sélectionnez un client :", X_validation_df.index)
     
     st.subheader("Affichage du résultat de la prédiction")
+
+    # Obtenir la probabilité de prédiction depuis l'API pour le client choisi
+    selected_client_data = X_validation_df.loc[[selected_client]]
+    api_prediction_proba = calculate_probabilities(MLFLOW_URI, selected_client_data)[0]
+
+    # obtenir les probabilités depuis le fichier local
     prediction_value = int(val_set_pred_proba.loc[selected_client, 'pred_proba'] > min_seuil_val)
     prediction_proba = val_set_pred_proba.loc[selected_client, 'pred_proba']
 
-    if prediction_value == 1:
-        st.write("**Crédit Refusé**", unsafe_allow_html=True, key="credit_refused")
-        st.write("Nous sommes désolés, mais la prédiction du modèle indique que le crédit doit être refusé.")
+    
+    st.header('Résultat de la demande de prêt')
+   
+    if api_prediction_proba == 0:
+        st.success(
+            f"  \n __CREDIT ACCORDÉ__  \n  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__% (inférieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtentiion d'un prêt).  \n "
+        )
     else:
-        st.write("**Crédit Accordé**", key="credit_accepted")
-        st.write("Félicitations! Le modèle prédit que le crédit peut être accordé.")
-
-        # Utiliser la probabilité brute pour déterminer la probabilité d'acceptation du crédit
-        true_proba = 1 - prediction_proba
-        st.write(f"La probabilité de remboursement du crédit est {true_proba:.2%}")
-        # Identifier les clients susceptibles de faire défaut
-        seuil_default = 0.5  #seuil à ajuster au besoin
-        if prediction_proba > seuil_default:
-            st.write("**Client susceptible de faire défaut**")
-        else:
-            st.write("**Client peu susceptible de faire défaut**")
+        st.error(
+            f"__CREDIT REFUSÉ__  \nLa probabilité de défaut de remboursement pour le crédit demandé __{round(100*prediction_proba,1)}__% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  \n "
+        )
         
-    st.subheader("Importance des variables pour un échantillon individuel")
+    st.subheader("Importance de variable locale")
+
+    sample_idx = selected_client
+    predicted_class = int(model.predict(X_val_new_df.loc[[sample_idx]]))
+    shap_values = explainer.shap_values(X_val_new_df.loc[[sample_idx]])[predicted_class]
 
     plot_shap_bar_plot(shap_values[0], X_val_new_df, X_val_new_df.columns, max_display=10)
     force_plot = shap.force_plot(explainer.expected_value[predicted_class], shap_values[0],
@@ -220,7 +220,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
 
     st.subheader("Analyse des variables")
 
-    selected_client_other = st.selectbox("Sélectionnez un autre client :", val_set_pred_proba.index)
+    selected_client_other = st.selectbox("Sélectionnez un autre client :", X_validation_df.index)
     st.subheader(f"Caractéristiques du Client {selected_client_other}")
 
     feature_options = X_validation_df.columns.tolist()
@@ -263,6 +263,9 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     ax.set_ylabel('Densité de Probabilité')
     st.pyplot(fig)
 
+# Positionner un client par rapport à d'autres clients
+    
+
 
 def plot_shap_bar_plot(shap_values, features, feature_names, max_display=10):
     plt.figure(edgecolor='black', linewidth=4)
@@ -283,6 +286,7 @@ def main():
     min_seuil_val = optimal_threshold(min_seuil_val)
     y_true = y_validation.flatten()
 
+    print(val_set_pred_proba.head(10))
     # Vérifier si l'API REST locale est disponible
     # mlflow models serve -m mlflow_model --host 127.0.0.1 --port 8001
     local_mlflow_uri = 'http://127.0.0.1:8001/invocations'
@@ -295,11 +299,12 @@ def main():
 
     predictions = get_predictions(MLFLOW_URI, X_validation_df)
 
+
     # Calculer le coût métier
     cout = metier_cost(y_true, predictions > min_seuil_val)
 
     # Afficher les autres résultats du modèle
-    display_model_results(model, X_validation, y_validation, predictions, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba)
+    display_model_results(MLFLOW_URI, model, X_validation, y_validation, predictions, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba)
 
     st.write(f"Coût métier : {cout}")
 
