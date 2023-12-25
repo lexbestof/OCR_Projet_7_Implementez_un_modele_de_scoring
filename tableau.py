@@ -478,7 +478,8 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
 
     st.subheader("Seuil Optimal")
     st.markdown(f"Seuil optimal : {min_seuil_val}")
-    print(y_proba_validation)
+    st.info("Le seuil optimal est calculé pour minimiser les coûts métier. Plus le seuil est bas, plus le modèle est conservateur.")
+
 
     pourcentage_score = int(y_proba_validation[0] * 100)
 
@@ -492,7 +493,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     # Obtenir la probabilité de prédiction depuis l'API pour le client choisi
     selected_client_data = X_validation[selected_client].tolist()
     api_prediction_proba = request_api(selected_client, selected_client_data)
-    print(api_prediction_proba)
+    
     # obtenir les probabilités depuis le fichier local
     prediction_value = int(val_set_pred_proba.loc[selected_client, 'pred_proba'] > min_seuil_val)
     prediction_proba = val_set_pred_proba.loc[selected_client, 'pred_proba']
@@ -506,7 +507,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
         )
     else:
         st.error(
-            f"__CREDIT REFUSÉ__  \nLa probabilité de défaut de remboursement pour le crédit demandé __{round(100*prediction_proba,1)}__% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  \n "
+            f"__CREDIT REFUSÉ__  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  \n "
         )
         
     st.subheader("Importance de variable locale")
@@ -522,21 +523,18 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
 
     plot_shap_bar_plot(shap_values[0], X_val_new_df, X_val_new_df.columns, max_display=10)
 
-        #à supprimer
 
-    #force_plot = shap.force_plot(explainer.expected_value[predicted_class], shap_values[0],
-                                #X_val_new_df.loc[[sample_idx]])
-    #st.components.v1.html(shap.getjs() + force_plot._repr_html_(), height=600, scrolling=True)
 
     st.subheader("Analyse des variables")
 
-    selected_client_other = st.selectbox("Sélectionnez un autre client :", val_set_pred_proba.index)
+    selected_client_other = st.selectbox("Sélectionnez un autre client :", X_validation_df.index)
     st.subheader(f"Caractéristiques du Client {selected_client_other}")
 
     feature_options = X_validation_df.columns.tolist()
     selected_feature_1 = st.selectbox("Sélectionnez la première caractéristique :", feature_options)
     selected_feature_2 = st.selectbox("Sélectionnez la deuxième caractéristique :", feature_options)
 
+    
     fig_dist = px.histogram(X_validation_df, x=selected_feature_1, color=y_validation_df["TARGET"],
                             marginal="rug", nbins=30, title=f"Distribution de {selected_feature_1}")
     st.plotly_chart(fig_dist)
@@ -550,6 +548,12 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
                            title=f"Analyse Bi-Variée ({selected_feature_1} vs {selected_feature_2})")
 
     st.plotly_chart(fig_bivariate)
+
+    # Nuage de points intéractif
+    fig_scatter = px.scatter(X_validation_df, x=selected_feature_1, y=selected_feature_2, color=y_validation_df["TARGET"],
+                         color_continuous_scale="Viridis", title="Nuage de points interactif")
+    st.plotly_chart(fig_scatter)
+
 
     st.subheader("Importance des caractéristiques globales")
     fig_bar_plot, ax_bar_plot = plt.subplots()
@@ -609,8 +613,10 @@ def main():
         data_to_send = X_validation[index].tolist()
 
 
-    # appaler la fonction request_api  with the client_id and data_to_send
+    # appaler la fonction request_api  avec client_id et data_to_send
         predictions = request_api(client_id, data_to_send)
+    
+    print(f"Valeurs de api_prediction_proba pour le client {client_id} : {predictions}")
 
     # Calculer le coût métier
     # Utiliser min_seuil_val directement pour calculer le coût
