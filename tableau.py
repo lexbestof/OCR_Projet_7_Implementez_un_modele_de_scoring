@@ -501,7 +501,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     
     st.header('Résultat de la demande de prêt')
    
-    if api_prediction_proba == 0:
+    if api_prediction_proba == [0.0]:
         st.success(
             f"  \n __CREDIT ACCORDÉ__  \n  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__% (inférieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtentiion d'un prêt).  \n "
         )
@@ -511,17 +511,15 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
         )
         
     st.subheader("Importance de variable locale")
-        
-    st.subheader("Importance des variables pour un échantillon individuel")
 
     explainer = shap.TreeExplainer(model)
     X_val_new_df = X_validation_df  # Use X_validation_df directly
 
     sample_idx = selected_client
-    predicted_class = int(model.predict(X_val_new_df.loc[[sample_idx]]))
-    shap_values = explainer.shap_values(X_val_new_df.loc[[sample_idx]])[predicted_class]
+    predicted_class = int(model.predict(X_validation_df.loc[[sample_idx]]))
+    shap_values = explainer.shap_values(X_validation_df.loc[[sample_idx]])[predicted_class]
 
-    plot_shap_bar_plot(shap_values[0], X_val_new_df, X_val_new_df.columns, max_display=10)
+    plot_shap_bar_plot(shap_values[0], X_validation_df, X_validation_df.columns, max_display=10)
 
 
 
@@ -543,16 +541,15 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
                               marginal="rug", nbins=30, title=f"Distribution de {selected_feature_2}")
     st.plotly_chart(fig_dist_2)
 
+    # Nuage de points intéractif
+
     fig_bivariate = px.scatter(X_validation_df, x=selected_feature_1, y=selected_feature_2,
                            color=y_validation_df["TARGET"], color_continuous_scale="Viridis",
                            title=f"Analyse Bi-Variée ({selected_feature_1} vs {selected_feature_2})")
 
     st.plotly_chart(fig_bivariate)
 
-    # Nuage de points intéractif
-    fig_scatter = px.scatter(X_validation_df, x=selected_feature_1, y=selected_feature_2, color=y_validation_df["TARGET"],
-                         color_continuous_scale="Viridis", title="Nuage de points interactif")
-    st.plotly_chart(fig_scatter)
+    
 
 
     st.subheader("Importance des caractéristiques globales")
@@ -604,17 +601,16 @@ def main():
 
     
 
-    for index in X_validation_df.index[:10]:  # Afficher seulement les 1000 premiers résultats
-    # Extraire client_id:
-
-        client_id = index
+  
+    selected_client = st.selectbox("Sélectionnez un client :", X_validation_df.index)
+    client_id = selected_client
 
     # Extraire le data_array depuis X_validation
-        data_to_send = X_validation[index].tolist()
+    data_to_send = X_validation[client_id].tolist()
 
 
     # appaler la fonction request_api  avec client_id et data_to_send
-        predictions = request_api(client_id, data_to_send)
+    predictions = request_api(client_id, data_to_send)
     
     print(f"Valeurs de api_prediction_proba pour le client {client_id} : {predictions}")
 
