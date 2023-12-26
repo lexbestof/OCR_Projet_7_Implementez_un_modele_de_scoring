@@ -168,11 +168,13 @@ def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
 
 def display_model_results(MLFLOW_URI, model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba):
     
-    st.title("Dashboard d'Évaluation du Modèle")
+    #Titre du dashboard
+    st.title("Tableau de bord intéractif d'évaluation de modèle")
     st.subheader("Résultats du Modèle")
 
     st.subheader("Seuil Optimal")
     st.markdown(f"Seuil optimal : {min_seuil_val}")
+    st.info("Le seuil optimal est calculé pour minimiser les coûts métier. Plus le seuil est bas, plus le modèle est conservateur.")
    
     pourcentage_score = int(y_proba_validation[0] * 100)
 
@@ -208,6 +210,8 @@ def display_model_results(MLFLOW_URI, model, X_validation, y_validation,y_proba_
         )
         
     st.subheader("Importance de variable locale")
+    st.info("Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
+    
 
     sample_idx = selected_client
     predicted_class = int(model.predict(X_val_new_df.loc[[sample_idx]]))

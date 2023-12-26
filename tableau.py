@@ -264,7 +264,6 @@ def load_model_and_data():
 
     blob_service_client = BlobServiceClient(account_url=f"https://{account_name}.blob.core.windows.net", credential=account_key)
 
-    # Nous allons utiliser un échantillon de 1000 clients 
     importance_results = load_data_from_blob(blob_service_client, container_name, "results_permutation_importance.pkl", pickle.load)
     X_validation = load_data_from_blob(blob_service_client, container_name, "X_validation_np.npy", np.load)
     y_validation = load_data_from_blob(blob_service_client, container_name, "y_validation_np.npy", np.load)
@@ -281,17 +280,17 @@ def load_model_and_data():
     val_set_pred_proba = val_set_pred_proba.reset_index()
   
 
-    # Load min_seuil_val directly in the function
+    # Charger min_seuil_val directement dans la fonction
     model_name = "optimum_threshold.joblib"
     min_seuil_val = load_data_from_blob(blob_service_client, container_name, model_name, joblib.load)
 
-    # Load df_predictproba directly in the function
+    # Charger df_predictproba directement dans la fonctionn
     data_name = "df_predictproba.csv"
     df_predictproba = load_data_from_blob(blob_service_client, container_name, data_name, pd.read_csv)
 
     return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba
 
-
+#Fonction de calcul de probabilité
 def calculate_probabilities_api(client_id, data_array):
     data =  {
     "input_data": {
@@ -461,7 +460,7 @@ def calculate_probabilities_api(client_id, data_array):
 def optimal_threshold(min_seuil_val):
     return min_seuil_val
 
-
+#Fonction du coût métier
 def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
     vp = np.sum((y_true == 1) & (y_pred == 1))
     vn = np.sum((y_true == 0) & (y_pred == 0))
@@ -472,8 +471,9 @@ def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
 
 
 def display_model_results(model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba):
- 
-    st.title("Dashboard d'Évaluation du Modèle")
+    
+    #Titre du dashboard
+    st.title("Tableau de bord intéractif d'évaluation de modèle")
     st.subheader("Résultats du Modèle")
 
     st.subheader("Seuil Optimal")
@@ -507,11 +507,11 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
         )
     else:
         st.error(
-            f"__CREDIT REFUSÉ__  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  \n "
+            f"__CREDIT REFUSÉ__  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__ \n "
         )
-        
+        #% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  
     st.subheader("Importance de variable locale")
-
+    st.info("Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
     explainer = shap.TreeExplainer(model)
     X_val_new_df = X_validation_df  # Use X_validation_df directly
 
@@ -587,9 +587,6 @@ def get_predictions_api(client_id, data_array):
     # Décoder les résultats en utilisant ast.literal_eval pour obtenir une liste de nombres
     return [ast.literal_eval(prediction) for prediction in predictions]
 
-
-
-
 def main():
     configure_page()
     model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba = load_model_and_data()
@@ -599,6 +596,7 @@ def main():
 
     allowSelfSignedHttps(True)
 
+    # Cette partie me sert de voir la structure de quelques prédictions
     for index in X_validation_df[:25].index:
         client_id = index
 
@@ -616,12 +614,12 @@ def main():
 
     # Calculer le coût métier
     # Utiliser min_seuil_val directement pour calculer le coût
-        cout = metier_cost(y_true, predictions)
+        #cout = metier_cost(y_true, predictions)
 
     # Afficher les autres résultats du modèle
     display_model_results(model, X_validation, y_validation, predictions, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba)
 
-    st.write(f"Coût métier : {cout}")
+    #st.write(f"Coût métier : {cout}")
 
 if __name__ == "__main__":
     main()
