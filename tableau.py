@@ -473,7 +473,7 @@ def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
 def display_model_results(model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba):
     
     #Titre du dashboard
-    st.title("Tableau de bord intéractif d'évaluation de modèle")
+    st.title("Tableau de bord intéractif d'évaluation de notre modèle")
     st.subheader("Résultats du Modèle")
 
     st.subheader("Seuil Optimal")
@@ -511,7 +511,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
         )
         #% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  
     st.subheader("Importance de variable locale")
-    st.info("Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
+    st.info("L'Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
     explainer = shap.TreeExplainer(model)
     X_val_new_df = X_validation_df  # Use X_validation_df directly
 
