@@ -503,7 +503,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
    
     if api_prediction_proba == [0.0]:
         st.success(
-            f"  \n __CREDIT ACCORDÉ__  \n  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__% (inférieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtentiion d'un prêt).  \n "
+            f"  \n __CREDIT ACCORDÉ__  \n  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__% (inférieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  \n "
         )
     else:
         st.error(
