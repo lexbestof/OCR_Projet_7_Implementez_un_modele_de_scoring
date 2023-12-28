@@ -65,9 +65,13 @@ def download_blob_as_bytes(blob_client):
     return blob_client.download_blob().readall()
 
 def load_data_from_blob(blob_service_client, container_name, data_name, loader_func):
+    
     blob_client_data = blob_service_client.get_blob_client(container=container_name, blob=data_name)
-    data_bytes = download_blob_as_bytes(blob_client_data)
-
+    try:
+        data_bytes = download_blob_as_bytes(blob_client_data)
+    except Exception as e:
+        print(f"Error downloading blob '{data_name}': {e}")
+        raise
     # Check if loader_func is pickle.load and handle accordingly
     if loader_func == pickle.load:
         with BytesIO(data_bytes) as file:
@@ -111,6 +115,7 @@ def load_model_and_data():
     model_path = "mlflow_model/model.pkl"
     model = load_model_from_blob(blob_service_client, container_name, model_path)
 
+    feature_importance = load_data_from_blob(blob_service_client, container_name, "figure_summary_plot_shap.joblib", joblib.load)
     df_val_sample = load_data_from_blob(blob_service_client, container_name, "df_val_sample.joblib", joblib.load)
     val_set_pred_proba = load_data_from_blob(blob_service_client, container_name, "val_set_pred_proba.csv", lambda x: pd.read_csv(BytesIO(x)))
     # Réinitialiser l'index
@@ -124,7 +129,7 @@ def load_model_and_data():
     data_name = "df_predictproba.csv"
     df_predictproba = load_data_from_blob(blob_service_client, container_name, data_name, pd.read_csv)
 
-    return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba
+    return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results,feature_importance, min_seuil_val, df_val_sample, df_predictproba
 
 
 def calculate_probabilities(model_uri, X_validation_df):
@@ -166,7 +171,7 @@ def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
     return cout
 
 
-def display_model_results(MLFLOW_URI, model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba):
+def display_model_results(MLFLOW_URI, model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df,feature_importance, val_set_pred_proba, min_seuil_val, df_predictproba):
     
     #Titre du dashboard
     st.title("Tableau de bord intéractif d'évaluation de modèle")
@@ -209,10 +214,15 @@ def display_model_results(MLFLOW_URI, model, X_validation, y_validation,y_proba_
             f"__CREDIT REFUSÉ__  \nLa probabilité de défaut de remboursement pour le crédit demandé __{round(100*prediction_proba,1)}__% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  \n "
         )
         
-    st.subheader("Importance de variable locale")
-    st.info("Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
-    
+    st.subheader("Importance des variables")
+    st.info("L'Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
 
+    st.title("Importance Globale des variables")
+     # Display the Matplotlib Figure
+    st.pyplot(feature_importance)
+
+    st.title("Importance locale des variables")
+    st.info("Quelles sont le variables qui ont conditionné la prise de décision pour le client sélectionné?")
     sample_idx = selected_client
     predicted_class = int(model.predict(X_val_new_df.loc[[sample_idx]]))
     shap_values = explainer.shap_values(X_val_new_df.loc[[sample_idx]])[predicted_class]
@@ -223,36 +233,56 @@ def display_model_results(MLFLOW_URI, model, X_validation, y_validation,y_proba_
     st.components.v1.html(shap.getjs() + force_plot._repr_html_(), height=600, scrolling=True)
 
     st.subheader("Analyse des variables")
-
-    selected_client_other = st.selectbox("Sélectionnez un autre client :", X_validation_df.index)
-    st.subheader(f"Caractéristiques du Client {selected_client_other}")
+    st.subheader(f"Caractéristiques du Client {selected_client}")
 
     feature_options = X_validation_df.columns.tolist()
     selected_feature_1 = st.selectbox("Sélectionnez la première caractéristique :", feature_options)
     selected_feature_2 = st.selectbox("Sélectionnez la deuxième caractéristique :", feature_options)
 
-    fig_dist = px.histogram(X_validation_df, x=selected_feature_1, color=y_validation_df["TARGET"],
-                            marginal="rug", nbins=30, title=f"Distribution de {selected_feature_1}")
+    fig_dist = px.histogram(
+        X_validation_df,
+        x=selected_feature_1,
+        color=y_validation_df["TARGET"].map({0: 'Non défaut', 1: 'Défaut'}),
+        marginal="rug",
+        nbins=30,
+        title=f"Distribution de {selected_feature_1}"
+    )
     st.plotly_chart(fig_dist)
 
-    fig_dist_2 = px.histogram(X_validation_df, x=selected_feature_2, color=y_validation_df["TARGET"],
-                              marginal="rug", nbins=30, title=f"Distribution de {selected_feature_2}")
+    fig_dist_2 = px.histogram(
+        X_validation_df,
+        x=selected_feature_2,
+        color=y_validation_df["TARGET"].map({0: 'Non défaut', 1: 'Défaut'}),
+        marginal="rug",
+        nbins=30,
+        title=f"Distribution de {selected_feature_2}"
+    )
     st.plotly_chart(fig_dist_2)
 
-    fig_bivariate = px.scatter(X_validation_df, x=selected_feature_1, y=selected_feature_2,
-                               color=y_proba_validation, color_continuous_scale="Viridis",
-                               title=f"Analyse Bi-Variée ({selected_feature_1} vs {selected_feature_2})")
+    fig_bivariate = px.scatter(
+        X_validation_df,
+        x=selected_feature_1,
+        y=selected_feature_2,
+        color=y_proba_validation,
+        color_continuous_scale="Viridis",
+        title=f"Analyse Bi-Variée ({selected_feature_1} vs {selected_feature_2})"
+    )
+
+# Mettre à jour la légende en fonction de y_validation_df["TARGET"]
+    fig_bivariate.update_layout(
+        legend=dict(
+            title="Défaut",
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+
     st.plotly_chart(fig_bivariate)
 
-    st.subheader("Importance des caractéristiques globales")
-    fig_bar_plot, ax_bar_plot = plt.subplots()
-    ax_bar_plot.barh(X_val_new_df.columns, shap_values[0], color='skyblue')
-    ax_bar_plot.set_xlabel('Importance')
-    ax_bar_plot.set_title('Importance des Caractéristiques (Local)')
-
-    fig_summary_plot = plt.figure()
-    shap.summary_plot(shap_values, features=X_val_new_df.loc[[sample_idx]], feature_names=X_val_new_df.columns)
-    st.pyplot(fig_summary_plot)
+    # Graphique de probabilité de Défaut
 
     ser_predictproba_true0 = df_predictproba.loc[df_predictproba['y_true'] == 0, 'y_predict_proba']
     ser_predictproba_true1 = df_predictproba.loc[df_predictproba['y_true'] == 1, 'y_predict_proba']
@@ -279,18 +309,29 @@ def plot_shap_bar_plot(shap_values, features, feature_names, max_display=10):
 
 def get_predictions(model_uri, data):
     pred = request_prediction(model_uri, data)
-    return pred["predictions"]
+    predictions = pred["predictions"]
 
+    # Afficher les 10 premières prédictions pour analyse
+    print("Format de sortie des prédictions :")
+    print(predictions[:10])
+
+    return predictions
+
+
+    
 
 def main():
     configure_page()
 
-    model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba = load_model_and_data()
+    model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results,feature_importance, min_seuil_val, df_val_sample, df_predictproba = load_model_and_data()
 
     min_seuil_val = optimal_threshold(min_seuil_val)
     y_true = y_validation.flatten()
 
     print(val_set_pred_proba.head(10))
+
+    # Ajouter le nom de l'auteur dans la barre latérale
+
     # Vérifier si l'API REST locale est disponible
     # mlflow models serve -m mlflow_model --host 127.0.0.1 --port 8001
     local_mlflow_uri = 'http://127.0.0.1:8001/invocations'
@@ -308,7 +349,7 @@ def main():
     cout = metier_cost(y_true, predictions > min_seuil_val)
 
     # Afficher les autres résultats du modèle
-    display_model_results(MLFLOW_URI, model, X_validation, y_validation, predictions, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba)
+    display_model_results(MLFLOW_URI, model, X_validation, y_validation, predictions, X_validation_df, y_validation_df,feature_importance, val_set_pred_proba, min_seuil_val, df_predictproba)
 
     st.write(f"Coût métier : {cout}")
 

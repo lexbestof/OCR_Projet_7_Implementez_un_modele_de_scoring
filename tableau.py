@@ -275,6 +275,7 @@ def load_model_and_data():
     model = load_model_from_blob(blob_service_client, container_name, model_path)
 
     df_val_sample = load_data_from_blob(blob_service_client, container_name, "df_val_sample.joblib", joblib.load)
+    feature_importance = load_data_from_blob(blob_service_client, container_name, "figure_summary_plot_shap.joblib", joblib.load)
     val_set_pred_proba = load_data_from_blob(blob_service_client, container_name, "val_set_pred_proba.csv", lambda x: pd.read_csv(BytesIO(x)))
     # Réinitialiser l'index
     val_set_pred_proba = val_set_pred_proba.reset_index()
@@ -288,7 +289,7 @@ def load_model_and_data():
     data_name = "df_predictproba.csv"
     df_predictproba = load_data_from_blob(blob_service_client, container_name, data_name, pd.read_csv)
 
-    return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba
+    return model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results,feature_importance, min_seuil_val, df_val_sample, df_predictproba
 
 #Fonction de calcul de probabilité
 def calculate_probabilities_api(client_id, data_array):
@@ -470,7 +471,7 @@ def metier_cost(y_true, y_pred, cout_fn=10, cout_fp=1):
     return cout
 
 
-def display_model_results(model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba):
+def display_model_results(model, X_validation, y_validation,y_proba_validation, X_validation_df, y_validation_df,feature_importance, val_set_pred_proba, min_seuil_val, df_predictproba):
     
     #Titre du dashboard
     st.title("Tableau de bord intéractif d'évaluation de notre modèle")
@@ -510,8 +511,19 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
             f"__CREDIT REFUSÉ__  \nLa probabilité de défaut de remboursement pour le crédit demandé est de __{round(100*prediction_proba,1)}__ \n "
         )
         #% (supérieur aux {100*optimal_threshold(min_seuil_val)}% pour l'obtention d'un prêt).  
+
+
+    st.subheader("Importance des variables")
+    st.info("L'Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
+
+    st.title("Importance Globale des variables")
+     # Display the Matplotlib Figure
+    st.pyplot(feature_importance)
+
     st.subheader("Importance de variable locale")
     st.info("L'Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
+    
+    
     explainer = shap.TreeExplainer(model)
     X_val_new_df = X_validation_df  # Use X_validation_df directly
 
@@ -522,45 +534,55 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     plot_shap_bar_plot(shap_values[0], X_validation_df, X_validation_df.columns, max_display=10)
 
 
-
     st.subheader("Analyse des variables")
-
-    selected_client_other = st.selectbox("Sélectionnez un autre client :", X_validation_df.index)
-    st.subheader(f"Caractéristiques du Client {selected_client_other}")
+    st.subheader(f"Caractéristiques du Client {selected_client}")
 
     feature_options = X_validation_df.columns.tolist()
     selected_feature_1 = st.selectbox("Sélectionnez la première caractéristique :", feature_options)
     selected_feature_2 = st.selectbox("Sélectionnez la deuxième caractéristique :", feature_options)
 
-    
-    fig_dist = px.histogram(X_validation_df, x=selected_feature_1, color=y_validation_df["TARGET"],
-                            marginal="rug", nbins=30, title=f"Distribution de {selected_feature_1}")
+    fig_dist = px.histogram(
+        X_validation_df,
+        x=selected_feature_1,
+        color=y_validation_df["TARGET"].map({0: 'Non défaut', 1: 'Défaut'}),
+        marginal="rug",
+        nbins=30,
+        title=f"Distribution de {selected_feature_1}"
+    )
     st.plotly_chart(fig_dist)
 
-    fig_dist_2 = px.histogram(X_validation_df, x=selected_feature_2, color=y_validation_df["TARGET"],
-                              marginal="rug", nbins=30, title=f"Distribution de {selected_feature_2}")
+    fig_dist_2 = px.histogram(
+        X_validation_df,
+        x=selected_feature_2,
+        color=y_validation_df["TARGET"].map({0: 'Non défaut', 1: 'Défaut'}),
+        marginal="rug",
+        nbins=30,
+        title=f"Distribution de {selected_feature_2}"
+    )
     st.plotly_chart(fig_dist_2)
 
-    # Nuage de points intéractif
+    fig_bivariate = px.scatter(
+        X_validation_df,
+        x=selected_feature_1,
+        y=selected_feature_2,
+        color=y_validation_df["TARGET"].map({0: 'Non défaut', 1: 'Défaut'}),
+        color_continuous_scale="Viridis",
+        title=f"Analyse Bi-Variée ({selected_feature_1} vs {selected_feature_2})"
+    )
 
-    fig_bivariate = px.scatter(X_validation_df, x=selected_feature_1, y=selected_feature_2,
-                           color=y_validation_df["TARGET"], color_continuous_scale="Viridis",
-                           title=f"Analyse Bi-Variée ({selected_feature_1} vs {selected_feature_2})")
+# Mettre à jour la légende en fonction de y_validation_df["TARGET"]
+    fig_bivariate.update_layout(
+        legend=dict(
+            title="Défaut",
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
 
     st.plotly_chart(fig_bivariate)
-
-    
-
-
-    st.subheader("Importance des caractéristiques globales")
-    fig_bar_plot, ax_bar_plot = plt.subplots()
-    ax_bar_plot.barh(X_val_new_df.columns, shap_values[0], color='skyblue')
-    ax_bar_plot.set_xlabel('Importance')
-    ax_bar_plot.set_title('Importance des Caractéristiques (Local)')
-
-    fig_summary_plot = plt.figure()
-    shap.summary_plot(shap_values, features=X_val_new_df.loc[[sample_idx]], feature_names=X_val_new_df.columns)
-    st.pyplot(fig_summary_plot)
 
     ser_predictproba_true0 = df_predictproba.loc[df_predictproba['y_true'] == 0, 'y_predict_proba']
     ser_predictproba_true1 = df_predictproba.loc[df_predictproba['y_true'] == 1, 'y_predict_proba']
@@ -589,7 +611,7 @@ def get_predictions_api(client_id, data_array):
 
 def main():
     configure_page()
-    model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results, min_seuil_val, df_val_sample, df_predictproba = load_model_and_data()
+    model, X_validation, y_validation, X_validation_df, y_validation_df, val_set_pred_proba, importance_results,feature_importance, min_seuil_val, df_val_sample, df_predictproba = load_model_and_data()
 
     min_seuil_val = optimal_threshold(min_seuil_val)
     y_true = y_validation.flatten()
@@ -597,10 +619,9 @@ def main():
     allowSelfSignedHttps(True)
 
     # Cette partie me sert de voir la structure de quelques prédictions
-    for index in X_validation_df[:25].index:
+    for index in X_validation_df[:10].index:
         client_id = index
 
-    
 
     # Extraire le data_array depuis X_validation
         data_to_send = X_validation[client_id].tolist()
@@ -617,7 +638,7 @@ def main():
         #cout = metier_cost(y_true, predictions)
 
     # Afficher les autres résultats du modèle
-    display_model_results(model, X_validation, y_validation, predictions, X_validation_df, y_validation_df, val_set_pred_proba, min_seuil_val, df_predictproba)
+    display_model_results(model, X_validation, y_validation, predictions, X_validation_df, y_validation_df,feature_importance, val_set_pred_proba, min_seuil_val, df_predictproba)
 
     #st.write(f"Coût métier : {cout}")
 
