@@ -521,8 +521,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     st.pyplot(feature_importance)
 
     st.subheader("Importance de variable locale")
-    st.info("L'Importance des variables est une mesure qui permet de quantifier l'importance relative de chaque variable dans un modèle de prédiction. Cette mesure permet de comprendre quelles variables ont le plus grand impact sur les prédictions du modèle et donc de mieux comprendre les relations entre les variables et les prédictions.")
-    
+    st.info("Quelles sont le variables qui ont conditionné la prise de décision pour le client sélectionné?")   
     
     explainer = shap.TreeExplainer(model)
     X_val_new_df = X_validation_df  # Use X_validation_df directly
