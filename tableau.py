@@ -594,7 +594,7 @@ def display_model_results(model, X_validation, y_validation,y_proba_validation, 
     ax.legend()
     ax.set_xlabel('Probabilité de Défaut (calculée par LGBM)')
     ax.set_ylabel('Densité de Probabilité')
-    st.pyplot(fig)
+    #st.pyplot(fig)
 
 
 def plot_shap_bar_plot(shap_values, features, feature_names, max_display=10):
