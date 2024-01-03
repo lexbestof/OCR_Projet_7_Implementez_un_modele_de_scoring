@@ -308,11 +308,7 @@ data_array = [0.0,
  15.0]
 print(request_api(client_id, data_array))
 client_id = 5
-data_array = [0, 
-1,
-2,
-3,
-4] # données fictives
+data_array = [0, 1, 2, 3, 4] # données fictives
 
 print(request_api(client_id, data_array))
 
